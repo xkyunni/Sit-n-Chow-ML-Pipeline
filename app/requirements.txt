@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+requests
+numpy
+opencv-python-headless
+pillow
+torch
+torchvision
+ultralytics
+firebase-admin
