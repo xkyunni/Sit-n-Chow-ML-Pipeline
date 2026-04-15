@@ -2,7 +2,7 @@ import requests
 import numpy as np
 import cv2
 
-from app.config import WEBSOCKET_BASE_URL
+from config import WEBSOCKET_BASE_URL
 
 class FrameClient:
     def __init__(self, base_url: str = WEBSOCKET_BASE_URL):
