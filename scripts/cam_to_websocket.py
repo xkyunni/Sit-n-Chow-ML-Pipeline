@@ -1,3 +1,4 @@
+import os
 import json
 import time
 import traceback
@@ -5,12 +6,12 @@ import traceback
 import cv2
 import websocket
 
-WS_URL = "ws://localhost:8080/ingest"
-DEVICE_ID = "webcam-test-1"
-FPS = 5
-JPEG_QUALITY = 60
-WIDTH = 640
-HEIGHT = 480
+WS_URL = os.getenv("WS_URL", "ws://localhost:8080/ingest")
+DEVICE_ID = os.getenv("DEVICE_ID", "webcam-test-1")
+FPS = int(os.getenv("FPS", "5"))
+JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "60"))
+WIDTH = int(os.getenv("WIDTH", "640"))
+HEIGHT = int(os.getenv("HEIGHT", "480"))
 
 
 def main():
