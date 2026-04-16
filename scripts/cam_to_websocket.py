@@ -1,100 +1,102 @@
 import os
+import cv2
 import json
 import time
+import argparse
 import traceback
-
-import cv2
 import websocket
-
-WS_URL = os.getenv("WS_URL", "ws://localhost:8080/ingest")
-DEVICE_ID = os.getenv("DEVICE_ID", "webcam-test-1")
-FPS = int(os.getenv("FPS", "5"))
-JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "60"))
-WIDTH = int(os.getenv("WIDTH", "640"))
-HEIGHT = int(os.getenv("HEIGHT", "480"))
 
 
 def main():
-    ws = None
-    cap = None
-    sent_count = 0
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--ws-url",
+        default=os.getenv("WS_URL", "ws://localhost:8080/ingest"),
+        help="WebSocket ingest URL",
+    )
+    parser.add_argument(
+        "--device-id",
+        default=os.getenv("DEVICE_ID", "webcam-test-1"),
+        help="Device ID to register with the websocket service",
+    )
+    parser.add_argument(
+        "--camera-index",
+        type=int,
+        default=0,
+        help="Webcam index",
+    )
+    parser.add_argument(
+        "--jpeg-quality",
+        type=int,
+        default=80,
+        help="JPEG quality (0-100)",
+    )
+    parser.add_argument(
+        "--fps",
+        type=float,
+        default=10.0,
+        help="Frames per second to send",
+    )
+    args = parser.parse_args()
+
+    ws_url = args.ws_url
+    device_id = args.device_id
+    frame_delay = 1.0 / args.fps if args.fps > 0 else 0.1
+
+    print(f"Connecting to websocket: {ws_url}")
+    ws = websocket.create_connection(ws_url, timeout=10)
+
+    hello = {
+        "type": "hello",
+        "deviceId": device_id,
+    }
+    ws.send(json.dumps(hello))
+    print(f"Registered deviceId: {device_id}")
+
+    cap = cv2.VideoCapture(args.camera_index)
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open webcam at index {args.camera_index}")
 
     try:
-        print(f"Connecting to websocket: {WS_URL}")
-        ws = websocket.create_connection(WS_URL, timeout=5)
-        print("Websocket connected")
-
-        ws.send(json.dumps({
-            "type": "hello",
-            "deviceId": DEVICE_ID
-        }))
-        print(f"Registered deviceId={DEVICE_ID}")
-
-        print("Opening webcam...")
-        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-
-        if not cap.isOpened():
-            print("Could not open webcam with CAP_DSHOW, trying default backend...")
-            cap.release()
-            cap = cv2.VideoCapture(0)
-
-        if not cap.isOpened():
-            raise RuntimeError("Could not open webcam")
-
-        # Force smaller capture size if supported
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
-
-        delay = 1.0 / FPS
-        print(f"Streaming webcam as {DEVICE_ID} to {WS_URL}")
-
         while True:
             ok, frame = cap.read()
-            if not ok or frame is None:
+            if not ok:
                 print("Failed to read webcam frame")
                 time.sleep(0.1)
                 continue
 
-            # Resize again just to be sure
-            frame = cv2.resize(frame, (WIDTH, HEIGHT))
-
-            ok, jpg = cv2.imencode(
+            ok, encoded = cv2.imencode(
                 ".jpg",
                 frame,
-                [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY]
+                [int(cv2.IMWRITE_JPEG_QUALITY), args.jpeg_quality],
             )
             if not ok:
                 print("Failed to encode frame as JPEG")
+                time.sleep(0.1)
                 continue
 
-            payload = jpg.tobytes()
-            print(f"Sending frame {sent_count + 1}, bytes={len(payload)}")
+            ws.send_binary(encoded.tobytes())
+            print(
+                json.dumps(
+                    {
+                        "deviceId": device_id,
+                        "bytes_sent": int(len(encoded)),
+                        "timestamp_ms": int(time.time() * 1000),
+                    },
+                    indent=2,
+                )
+            )
 
-            try:
-                ws.send(payload, opcode=websocket.ABNF.OPCODE_BINARY)
-                sent_count += 1
-                print(f"Sent frame {sent_count}")
-            except Exception as e:
-                print(f"Failed to send frame {sent_count + 1}: {e}")
-                break
+            time.sleep(frame_delay)
 
-            time.sleep(delay)
-
-    except KeyboardInterrupt:
-        print("Stopping webcam sender")
-    except Exception as e:
-        print("cam_to_websocket.py failed:")
-        print(e)
-        traceback.print_exc()
     finally:
-        if cap is not None:
-            cap.release()
-        if ws is not None:
-            try:
-                ws.close()
-            except Exception:
-                pass
+        cap.release()
+        ws.close()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        print("cam_to_websocket.py failed:")
+        traceback.print_exc()

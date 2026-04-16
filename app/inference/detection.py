@@ -25,7 +25,7 @@ def crop_with_padding(frame, xyxy, pad_frac=0.15):
     return frame[cy1:cy2, cx1:cx2].copy(), (cx1, cy1, cx2, cy2)
 
 class DogDetector:
-    def __init__(self, model_path: str, conf_threshold: float = 0.35, pad_frac: float = 0.15):
+    def __init__(self, model_path: str, conf_threshold: float = 0.20, pad_frac: float = 0.15):
         self.model = YOLO(model_path)
         self.conf_threshold = conf_threshold
         self.pad_frac = pad_frac
